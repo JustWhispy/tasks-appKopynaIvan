@@ -9,6 +9,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         service: [tasks-api, title-normalizer]
 
@@ -31,4 +32,14 @@ jobs:
 
       - name: Run tests
         working-directory: services/${{ matrix.service }}
-        run: python -m pytest -v
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest -v 2>&1 | tee test-report.txt
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.service }}-test-report
+          path: services/${{ matrix.service }}/test-report.txt
