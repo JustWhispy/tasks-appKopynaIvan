@@ -56,3 +56,14 @@ Run in each service folder:
 ```bash
 pytest
 ```
+
+## CI reports
+
+The GitHub Actions workflow tests both services on Python 3.13 and scans their
+application code with Bandit. Test logs and HTML security reports are uploaded as
+artifacts, including when a check fails.
+
+Successful pushes to `main` publish an index linking to both services' reports on
+GitHub Pages. Pull requests run the checks without deploying. To enable report
+publishing, select **GitHub Actions** under **Settings → Pages → Build and
+deployment → Source** in the repository.
