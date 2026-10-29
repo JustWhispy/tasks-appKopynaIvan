@@ -65,6 +65,7 @@ jobs:
           if-no-files-found: error
 
   deploy:
+    pull_request:
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -113,10 +114,68 @@ jobs:
           HTML
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: _site/
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build images
+        run: |
+          docker build -t tasks-api ./services/tasks-api
+          docker build -t title-normalizer ./services/title-normalizer
+
+      - name: Start containers
+        run: |
+          docker network create tasks-net
+
+          docker run -d --name title-normalizer \
+            --network tasks-net \
+            -p 5001:5001 \
+            title-normalizer
+
+          docker run -d --name tasks-api \
+            --network tasks-net \
+            -p 5002:5000 \
+            -e NORMALIZER_URL=http://title-normalizer:5001 \
+            tasks-api
+
+      - name: Wait for services
+        run: |
+          curl --fail --retry 10 --retry-connrefused --retry-delay 1 http://localhost:5001/health
+          curl --fail --retry 10 --retry-connrefused --retry-delay 1 http://localhost:5002/health
+
+
+      - name: Check task normalization
+        run: |
+          curl --fail --silent --show-error \
+            http://localhost:5002/tasks \
+            -H 'Content-Type: application/json' \
+            -d '{"title":"  buy   milk "}' \
+            -o response.json
+
+          cat response.json
+
+          python3 - <<'PY'
+          import json
+          with open("response.json") as file:
+              task = json.load(file)
+          assert task["title"] == "Buy milk", task
+          assert task["normalized"] is True, task
+          PY
+
+        
+      - name: Show container logs
+        if: always()
+        run: |
+          docker logs title-normalizer || true
+          docker logs tasks-api || true
